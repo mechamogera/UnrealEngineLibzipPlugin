@@ -4,6 +4,11 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformFilemanager.h"
 
+ULibzipArchiver::~ULibzipArchiver()
+{
+	CloseArchive();
+}
+
 bool ULibzipArchiver::GetRelativeFilesInDirectory(FString Dir, bool bAddParentDirectory, TArray<FString>& FilePaths)
 {
 	FPaths::NormalizeDirectoryName(Dir);
@@ -100,6 +105,7 @@ bool ULibzipArchiver::CloseArchive()
 		}
 		Zipper = NULL;
 	}
+	Password = "";
 
 	return true;
 }
@@ -146,7 +152,15 @@ int64 ULibzipArchiver::GetArchiveEntries()
 
 void ULibzipArchiver::WriteArchiveErrLog(const FString& BaseMessage)
 {
-	UE_LOG(LogTemp, Error, TEXT("%s %d %d %s"), *BaseMessage, Zipper->error.zip_err, Zipper->error.sys_err, UTF8_TO_TCHAR(Zipper->error.str));
+	if (Zipper != NULL)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s %d %d %s"), *BaseMessage, Zipper->error.zip_err, Zipper->error.sys_err, UTF8_TO_TCHAR(Zipper->error.str));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s"), *BaseMessage);
+	}
+	
 }
 
 bool ULibzipArchiver::GetEntryToMemory(int64 Index, FString& Name, TArray<uint8>& Data)
@@ -162,7 +176,7 @@ bool ULibzipArchiver::GetEntryToMemory(int64 Index, FString& Name, TArray<uint8>
 	Name = UTF8_TO_TCHAR(sb.name);
 	Data.SetNumUninitialized(sb.size, true);
 	TSharedPtr<zip_file> Zf(Password.IsEmpty() ? zip_fopen(Zipper, sb.name, 0) : zip_fopen_encrypted(Zipper, sb.name, 0, TCHAR_TO_UTF8(*Password)), [](zip_file* zipfile) {
-		zip_fclose(zipfile);
+		if (zipfile) { zip_fclose(zipfile); }
 		});
 	if (!Zf.IsValid())
 	{

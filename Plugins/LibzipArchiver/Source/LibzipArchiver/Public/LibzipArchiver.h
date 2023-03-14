@@ -12,6 +12,8 @@ class LIBZIPARCHIVER_API ULibzipArchiver : public UObject
 	GENERATED_BODY()
 
 public:
+	virtual ~ULibzipArchiver();
+
 	UFUNCTION(BlueprintCallable)
 		static bool GetRelativeFilesInDirectory(FString DirectoryPath, bool bAddParentDirectory, TArray<FString>& FilePaths);
 
