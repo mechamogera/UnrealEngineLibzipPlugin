@@ -15,10 +15,18 @@ void GetRelativeFilesInDir::Define()
 			TestEqual("get relative 1st file", "Win64/libz-static.lib", FilePaths[0]);
 			TestEqual("get relative 2nd file", "Win64/libzip-static.lib", FilePaths[1]);
 		});
-	});
 
-	Describe("get relative files in directory", [this]() {
-		It("should return false when invaild file specified", [this]() {
+		It("should return filepaths with Parent dir", [this]() {
+			FString Dir = FPaths::Combine(FPaths::ProjectPluginsDir(), "LibzipArchiver", "Source", "ThirdParty", "libzip", "lib");
+			TArray<FString> FilePaths;
+			bool bResult = ULibzipArchiver::GetRelativeFilesInDirectory(Dir, true, FilePaths);
+			TestTrue("get relative file result", bResult);
+			TestEqual("get realative files number", 2, FilePaths.Num());
+			TestEqual("get relative 1st file", "lib/Win64/libz-static.lib", FilePaths[0]);
+			TestEqual("get relative 2nd file", "lib/Win64/libzip-static.lib", FilePaths[1]);
+			});
+
+		It("should return false when invaild dir specified", [this]() {
 			AddExpectedError("NotFoundDirectory", EAutomationExpectedErrorFlags::Contains, 0);
 			TArray<FString> FilePaths;
 			bool bResult = ULibzipArchiver::GetRelativeFilesInDirectory("hoge", true, FilePaths);

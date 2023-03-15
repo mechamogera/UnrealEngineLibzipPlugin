@@ -58,6 +58,8 @@ bool ULibzipArchiver::GetRelativeFilesInDirectory(FString Dir, bool bAddParentDi
 
 bool ULibzipArchiver::OpenArchiveFromStorage(const FString& ArchivePath)
 {
+	CloseArchive();
+
 	int errorp;
 	Zipper = zip_open(TCHAR_TO_UTF8(*ArchivePath), ZIP_RDONLY, &errorp);
 	if (Zipper == NULL)
@@ -71,6 +73,8 @@ bool ULibzipArchiver::OpenArchiveFromStorage(const FString& ArchivePath)
 
 bool ULibzipArchiver::CreateArchiveFromStorage(const FString& ArchivePath)
 {
+	CloseArchive();
+
 	int errorp;
 	Zipper = zip_open(TCHAR_TO_UTF8(*ArchivePath), ZIP_CREATE | ZIP_EXCL, &errorp);
 	if (Zipper == NULL)
@@ -84,14 +88,16 @@ bool ULibzipArchiver::CreateArchiveFromStorage(const FString& ArchivePath)
 
 bool ULibzipArchiver::OpenEncryptedArchiveFromStorage(const FString& ArchivePath, const FString& ArchivePassword)
 {
+	bool bResult = OpenArchiveFromStorage(ArchivePath);
 	Password = ArchivePassword;
-	return OpenArchiveFromStorage(ArchivePath);
+	return bResult;
 }
 
 bool ULibzipArchiver::CreateEncryptedArchiveFromStorage(const FString& ArchivePath, const FString& ArchivePassword)
 {
+	bool bResult = CreateArchiveFromStorage(ArchivePath);
 	Password = ArchivePassword;
-	return CreateArchiveFromStorage(ArchivePath);
+	return bResult;
 }
 
 bool ULibzipArchiver::CloseArchive()
@@ -112,14 +118,22 @@ bool ULibzipArchiver::CloseArchive()
 
 bool ULibzipArchiver::AddEntryFromStorage(const FString& EntryName, const FString& FilePath)
 {
-	zip_source_t* Source = zip_source_file(Zipper, TCHAR_TO_UTF8(*FilePath), 0, 0);
-	if (Source == NULL)
+	if (!FPaths::FileExists(FilePath)) 
+	{
+		UE_LOG(LogTemp, Error, TEXT("Not exist file for adding entry"))
+		return false;
+	}
+
+	TSharedPtr<zip_source_t> Zs(zip_source_file(Zipper, TCHAR_TO_UTF8(*FilePath), 0, 0), [](zip_source_t* zipfile) {
+		if (zipfile) { zip_source_close(zipfile); }
+	});
+	if (!Zs.IsValid())
 	{
 		WriteArchiveErrLog("Failed to zip_source_file");
 		return false;
 	}
 
-	zip_int64_t Index = zip_file_add(Zipper, TCHAR_TO_UTF8(*EntryName), Source, ZIP_FL_ENC_UTF_8);
+	zip_int64_t Index = zip_file_add(Zipper, TCHAR_TO_UTF8(*EntryName), Zs.Get(), ZIP_FL_ENC_UTF_8);
 	if (Index < 0)
 	{
 		WriteArchiveErrLog("Failed to zip_file_add");
@@ -165,11 +179,17 @@ void ULibzipArchiver::WriteArchiveErrLog(const FString& BaseMessage)
 
 bool ULibzipArchiver::GetEntryToMemory(int64 Index, FString& Name, TArray<uint8>& Data)
 {
+	if (Zipper == NULL)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Not yet opened"));
+		return false;
+	}
+
 	struct zip_stat sb;
 	int result = zip_stat_index(Zipper, Index, 0, &sb);
 	if (result < 0)
 	{
-		WriteArchiveErrLog("Failed to zip_file_set_encryption");
+		WriteArchiveErrLog("Failed to zip_stat_index");
 		return false;
 	}
 
@@ -205,7 +225,7 @@ bool ULibzipArchiver::WriteEntryToStorage(int64 Index, const FString& BaseDir)
 	FArchive* Archive = IFileManager::Get().CreateFileWriter(*FPaths::Combine(BaseDir, Name));
 	if (Archive == nullptr)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create file"))
+		UE_LOG(LogTemp, Error, TEXT("Failed to create file"));
 		return false;
 	}
 	TUniquePtr<FArchive> FileWriter(Archive);

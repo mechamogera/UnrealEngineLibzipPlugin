@@ -108,9 +108,101 @@ void Archive::Define()
 			TestTrue("close archive", bReadCloseResult);
 		});
 
+		It("should not archive with non-existent dir", [this]() {
+			AddExpectedError("Failed to zip_open", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bOpenResult = Archiver->CreateArchiveFromStorage("noexist/hoge.zip");
+			TestFalse("open archive", bOpenResult);
+		});
+
+		It("should not add entry because it is not open", [this]() {
+			FString TargetFilePath = FPaths::Combine(FPaths::ProjectPluginsDir(),
+				"LibzipArchiver", "Source", "ThirdParty", "libzip", "lib", "Win64", "libzip-static.lib");
+			FString TargetFileName = FPaths::GetCleanFilename(TargetFilePath);
+
+			AddExpectedError("Failed to zip_source_file", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bAddResult = Archiver->AddEntryFromStorage(TargetFileName, TargetFilePath);
+			TestFalse("add entry", bAddResult);
+		});
+
+		It("should not add entry with non-existent file", [this]() {
+			FString OutZipPath = FPaths::Combine(TempDirPath, "test.zip");
+
+			bool bOpenResult = Archiver->CreateArchiveFromStorage(OutZipPath);
+			TestTrue("open archive", bOpenResult);
+
+			AddExpectedError("Not exist file for adding entry", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bAddResult = Archiver->AddEntryFromStorage("hoge", "hoge.txt");
+			TestFalse("add entry", bAddResult);
+		});
+
+		It("should not add entry with same entry", [this]() {
+			FString TargetFilePath = FPaths::Combine(FPaths::ProjectPluginsDir(),
+				"LibzipArchiver", "Source", "ThirdParty", "libzip", "lib", "Win64", "libzip-static.lib");
+			FString TargetFileName = FPaths::GetCleanFilename(TargetFilePath);
+			FString OutZipPath = FPaths::Combine(TempDirPath, "test.zip");
+
+			bool bOpenResult = Archiver->CreateArchiveFromStorage(OutZipPath);
+			TestTrue("open archive", bOpenResult);
+			bool bAddResult = Archiver->AddEntryFromStorage(TargetFileName, TargetFilePath);
+			TestTrue("add entry", bAddResult);
+			
+			AddExpectedError("Failed to zip_file_add", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bAddResult2 = Archiver->AddEntryFromStorage(TargetFileName, TargetFilePath);
+			TestFalse("add entry", bAddResult2);
+		});
+
+		It("should not unarchive with non-existent file", [this]() {
+			AddExpectedError("Failed to zip_open", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bOpenResult = Archiver->OpenArchiveFromStorage("hoge.zip");
+			TestFalse("open archive", bOpenResult);
+		});
+
+		It("should not write entry because it is not open", [this]() {
+			AddExpectedError("Not yet opened", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bWriteResult = Archiver->WriteEntryToStorage(1, TempDirPath);
+			TestFalse("write entry", bWriteResult);
+		});
+
+		It("should not write entry with invalid index", [this]() {
+			FString TargetFilePath = FPaths::Combine(FPaths::ProjectPluginsDir(),
+				"LibzipArchiver", "Source", "ThirdParty", "libzip", "lib", "Win64", "libzip-static.lib");
+			FString TargetFileName = FPaths::GetCleanFilename(TargetFilePath);
+			FString OutZipPath = FPaths::Combine(TempDirPath, "test.zip");
+
+			// archive
+			ArchiveFilesTest(OutZipPath, "", { { TargetFileName, TargetFilePath } });
+			
+			// unarchive
+			bool bOpenResult = Archiver->OpenArchiveFromStorage(OutZipPath);
+			TestTrue("open archive", bOpenResult);
+
+			AddExpectedError("Failed to zip_stat_index", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bWriteResult = Archiver->WriteEntryToStorage(1, TempDirPath);
+			TestFalse("write entry", bWriteResult);
+		});
+
+		It("should not write entry with invalid dir", [this]() {
+			FString TargetFilePath = FPaths::Combine(FPaths::ProjectPluginsDir(),
+				"LibzipArchiver", "Source", "ThirdParty", "libzip", "lib", "Win64", "libzip-static.lib");
+			FString TargetFileName = FPaths::GetCleanFilename(TargetFilePath);
+			FString OutZipPath = FPaths::Combine(TempDirPath, "test.zip");
+
+			// archive
+			ArchiveFilesTest(OutZipPath, "", { { TargetFileName, TargetFilePath } });
+
+			// unarchive
+			bool bOpenResult = Archiver->OpenArchiveFromStorage(OutZipPath);
+			TestTrue("open archive", bOpenResult);
+
+			AddExpectedError("Failed to create file", EAutomationExpectedErrorFlags::Contains, 0);
+			bool bWriteResult = Archiver->WriteEntryToStorage(0, "hoge:/");
+			TestFalse("write entry", bWriteResult);
+		});
+
 		AfterEach([this]() {
 			if (FPaths::DirectoryExists(TempDirPath))
 			{
+				Archiver->CloseArchive();
 				FileManager.DeleteDirectoryRecursively(*TempDirPath);
 			}
 		});
